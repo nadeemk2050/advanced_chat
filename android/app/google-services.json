@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "335430690673",
+    "firebase_url": "https://nadeem-home-puzzles-default-rtdb.firebaseio.com",
+    "project_id": "nadeem-home-puzzles",
+    "storage_bucket": "nadeem-home-puzzles.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:335430690673:android:1cc9514d167029681c38d0",
+        "android_client_info": {
+          "package_name": "com.example.advanced_chat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAvt89AqQnuXZ3dS61JXAavei3hVmi8mpk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
