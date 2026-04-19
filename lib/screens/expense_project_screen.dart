@@ -58,6 +58,7 @@ class _ExpenseProjectScreenState extends State<ExpenseProjectScreen> with Single
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'expense_entry_add_fab',
         onPressed: _showAddEntryBottomSheet,
         backgroundColor: ChatTheme.primary,
         icon: const Icon(Icons.add_card_rounded, color: Colors.black),

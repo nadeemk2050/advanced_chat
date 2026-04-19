@@ -43,6 +43,7 @@ class _ExpenseDashboardState extends State<ExpenseDashboard> {
             ],
           ),
           FloatingActionButton.small(
+            heroTag: 'expense_project_add_fab',
             onPressed: _showCreateProjectDialog,
             backgroundColor: ChatTheme.primary,
             child: const Icon(Icons.add, color: Colors.black),

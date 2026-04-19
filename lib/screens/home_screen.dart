@@ -121,28 +121,83 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             tooltip: 'Personal Hub',
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PersonalHubScreen())),
           ),
-          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance.collection('users').doc(currentUserId).snapshots(),
-            builder: (context, snap) {
-              final data = snap.data?.data();
-              final photoUrl = data?['photoUrl'];
-              return GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditorScreen())),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: CircleAvatar(
-                    radius: 16,
-                    backgroundColor: ChatTheme.primary.withOpacity(0.2),
-                    backgroundImage: (photoUrl != null && photoUrl.isNotEmpty) ? NetworkImage(photoUrl) : null,
-                    child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.person, color: ChatTheme.primary, size: 20) : null,
-                  ),
-                ),
+          StreamBuilder<List<ConnectionModel>>(
+            stream: ChatService().getIncomingFriendRequests(),
+            builder: (context, friendSnap) {
+              return StreamBuilder<List<Map<String, dynamic>>>(
+                stream: GroupService().getIncomingInvites(),
+                builder: (context, groupSnap) {
+                  final total = (friendSnap.data?.length ?? 0) + (groupSnap.data?.length ?? 0);
+                  
+                  return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance.collection('users').doc(currentUserId).snapshots(),
+                    builder: (context, snap) {
+                      final data = snap.data?.data();
+                      final photoUrl = data?['photoUrl'];
+                      return GestureDetector(
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditorScreen())),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: ChatTheme.primary.withOpacity(0.2),
+                                backgroundImage: (photoUrl != null && photoUrl.isNotEmpty) ? NetworkImage(photoUrl) : null,
+                                child: (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.person, color: ChatTheme.primary, size: 20) : null,
+                              ),
+                              if (total > 0)
+                                Positioned(
+                                  right: 0,
+                                  top: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                    constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                                    child: Text(
+                                      '$total',
+                                      style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                }
               );
-            },
+            }
           ),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
-            onPressed: () => AuthService().signOut(),
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  title: const Text('LEAVING THE HUB?', style: TextStyle(fontWeight: FontWeight.w900)),
+                  content: const Text(
+                    'Are you sure you want to leave your best friends alone in this world?',
+                    style: TextStyle(fontStyle: FontStyle.italic),
+                  ),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('STAY')),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('YES, LEAVE'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                AuthService().signOut();
+              }
+            },
           ),
         ],
       ),

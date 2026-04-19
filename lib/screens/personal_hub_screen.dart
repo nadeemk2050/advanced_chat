@@ -365,6 +365,7 @@ class _PersonalHubScreenState extends State<PersonalHubScreen> with SingleTicker
             children: [
               TextField(
                 controller: titleController,
+                style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
                 decoration: const InputDecoration(labelText: 'Mission Title', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 16),
@@ -712,7 +713,7 @@ class _MissionDetailSheetState extends State<_MissionDetailSheet> {
                 Expanded(
                   child: TextField(
                     controller: _taskController,
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
                     decoration: const InputDecoration(hintText: 'Add a new sub-task...', border: InputBorder.none),
                     onSubmitted: (_) => _handleAddTask(),
                   ),
