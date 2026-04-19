@@ -7,9 +7,9 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Profiles — any signed-in user can read; only owner can write
+    // Profiles — anyone can read user details (needed for sign-up check and discovery); only owner can write
     match /users/{userId} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow write: if isSignedIn() && request.auth.uid == userId;
     }
 

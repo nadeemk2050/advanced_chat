@@ -9,26 +9,36 @@ class AuthService {
   // Sign Up
   Future<UserCredential?> signUp(String email, String password, String name) async {
     try {
-      // 1. Check if name is already taken (Case-Insensitive)
+      // 1. Solid Username Check (Case-Insensitive)
       final nameCheck = await _firestore
           .collection('users')
-          .where('nameLowercase', isEqualTo: name.toLowerCase())
+          .where('nameLowercase', isEqualTo: name.toLowerCase().trim())
           .get();
       if (nameCheck.docs.isNotEmpty) {
-        throw Exception('This username is already taken. Please choose another.');
+        throw Exception('The username "$name" is already taken. Please try another one. 🛡️');
       }
 
+      // 2. Solid Email Check (Pre-check for better messaging)
+      final emailCheck = await _firestore
+          .collection('users')
+          .where('email', isEqualTo: email.toLowerCase().trim())
+          .get();
+      if (emailCheck.docs.isNotEmpty) {
+        throw Exception('The email "$email" is already linked to an account. Did you forget your password? 🔑');
+      }
+
+      // 3. Create Firebase Auth account
       UserCredential credential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      // Create user in Firestore
+      // 4. Create record in Firestore
       UserModel newUser = UserModel(
         uid: credential.user!.uid,
-        name: name,
-        nameLowercase: name.toLowerCase(),
-        email: email,
+        name: name.trim(),
+        nameLowercase: name.toLowerCase().trim(),
+        email: email.toLowerCase().trim(),
         lastSeen: DateTime.now(),
         isOnline: true,
         photoUrl: '',
@@ -38,6 +48,15 @@ class AuthService {
 
       await _firestore.collection('users').doc(newUser.uid).set(newUser.toMap());
       return credential;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        throw Exception('This email is already in use by another user.');
+      } else if (e.code == 'weak-password') {
+        throw Exception('The password provided is too weak.');
+      } else if (e.code == 'invalid-email') {
+        throw Exception('The email address is not valid.');
+      }
+      rethrow;
     } catch (e) {
       print('Sign Up Error: $e');
       rethrow;

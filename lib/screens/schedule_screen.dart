@@ -128,7 +128,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       'You have ${activeMissions.length} active missions today. '
                       '${bigThreeCount == 3 ? "Big 3 are set!" : "Only $bigThreeCount/3 of your Big 3 are ready."}',
                       style: GoogleFonts.montserrat(
-                        color: Colors.white70,
+                        color: Colors.white,
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -206,7 +206,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           Text(
             'NO BIG 3 SET YET',
             style: GoogleFonts.montserrat(
-              color: Colors.grey,
+              color: ChatTheme.textPrimary,
               fontSize: 11,
               fontWeight: FontWeight.w900,
             ),
@@ -216,7 +216,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             'Focus on the 3 critical missions that will move the needle today.',
             textAlign: TextAlign.center,
             style: GoogleFonts.montserrat(
-              color: Colors.grey.withOpacity(0.5),
+              color: ChatTheme.textPrimary.withOpacity(0.7),
               fontSize: 10,
             ),
           ),
@@ -298,9 +298,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             Text(
                               '${hour.toString().padLeft(2, '0')}:00',
                               style: GoogleFonts.montserrat(
-                                color: Colors.grey,
+                                color: ChatTheme.textPrimary,
                                 fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w900,
                               ),
                             ),
                             if (hour != 23)
@@ -382,7 +382,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ),
               GestureDetector(
                 onTap: () => _service.updateTaskSchedule(task.id, null, null),
-                child: const Icon(Icons.close_rounded, size: 14, color: Colors.grey),
+                child: const Icon(Icons.close_rounded, size: 14, color: ChatTheme.textPrimary),
               ),
             ],
           ),
@@ -393,8 +393,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             overflow: TextOverflow.ellipsis,
             style: GoogleFonts.montserrat(
               fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              color: ChatTheme.textPrimary,
             ),
           ),
         ],
@@ -445,11 +445,26 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                               children: unscheduled.map((t) => ListTile(
                                 title: Text(t.title, style: const TextStyle(color: Colors.grey, fontSize: 13)),
                                 trailing: const Icon(Icons.add_circle_outline_rounded, color: ChatTheme.primary),
-                                onTap: () {
-                                  final startTime = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, hour);
-                                  final endTime = startTime.add(const Duration(hours: 1));
+                                onTap: () async {
+                                  final start = await showTimePicker(
+                                    context: context,
+                                    initialTime: TimeOfDay(hour: hour, minute: 0),
+                                    helpText: 'SELECT START TIME (MINUTES ALLOWED)',
+                                  );
+                                  if (start == null) return;
+
+                                  final end = await showTimePicker(
+                                    context: context,
+                                    initialTime: TimeOfDay(hour: start.hour + 1, minute: start.minute),
+                                    helpText: 'SELECT END TIME',
+                                  );
+                                  if (end == null) return;
+
+                                  final startTime = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, start.hour, start.minute);
+                                  final endTime = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, end.hour, end.minute);
+                                  
                                   _service.updateTaskSchedule(t.id, startTime, endTime);
-                                  Navigator.pop(context);
+                                  if (context.mounted) Navigator.pop(context);
                                 },
                               )).toList(),
                             );

@@ -98,19 +98,40 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _isLoading = false;
 
   void _signup() async {
-    if (_nameController.text.isEmpty) return;
-    if (!mounted) return;
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final pass = _passController.text.trim();
+
+    if (name.isEmpty || email.isEmpty || pass.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
+      return;
+    }
+
     setState(() => _isLoading = true);
     
-    final user = await _auth.signUp(_emailController.text, _passController.text, _nameController.text);
-    
-    if (!mounted) return;
-    setState(() => _isLoading = false);
+    try {
+      final user = await _auth.signUp(email, pass, name);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
 
-    if (user != null) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Signup Failed')));
+      if (user != null) {
+         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      
+      // Extract the human-friendly message from the exception
+      String errorMsg = e.toString();
+      if (errorMsg.startsWith('Exception: ')) {
+        errorMsg = errorMsg.replaceFirst('Exception: ', '');
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(errorMsg),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+      ));
     }
   }
 
