@@ -66,5 +66,11 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>We need access to the camera to take profile photos and send image messages.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>We need access to your photo library to let you share images and files in the war room.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>We need access to the microphone for recording voice messages and mission briefings.</string>
 </dict>
 </plist>

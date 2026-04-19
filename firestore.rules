@@ -1,0 +1,139 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Profiles — any signed-in user can read; only owner can write
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isBlocked(userId) {
+       let userDoc = get(/databases/$(database)/documents/users/$(userId));
+       return userDoc != null && request.auth.uid in userDoc.data.get('blockedUsers', []);
+    }
+
+    // Connections — participants only
+    match /connections/{connectionId} {
+      allow read: if isSignedIn() && (
+        connectionId.matches('.*' + request.auth.uid + '.*') ||
+        (resource != null && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId))
+      );
+      allow create: if isSignedIn() && 
+        (request.auth.uid == request.resource.data.senderId || request.auth.uid == request.resource.data.receiverId);
+      allow update, delete: if isSignedIn() && (
+        request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId
+      );
+    }
+
+    // Group Invites — participants only
+    match /group_invites/{inviteId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId
+      );
+      allow create, update, delete: if isSignedIn();
+    }
+    match /chats/{chatRoomId} {
+      function isParticipantInId() {
+        return chatRoomId.matches('.*' + request.auth.uid + '.*');
+      }
+
+      allow read: if isSignedIn() && (
+        (resource != null && request.auth.uid in resource.data.participants) ||
+        (resource == null && isParticipantInId())
+      );
+      
+      allow write: if isSignedIn() && (
+        (resource != null && request.auth.uid in resource.data.participants) ||
+        (resource == null && isParticipantInId() && request.auth.uid in request.resource.data.participants)
+      );
+    }
+
+    // Chat Messages — descendants of chatRoom
+    match /chats/{chatRoomId}/messages/{messageId} {
+      allow read: if isSignedIn() && chatRoomId.matches('.*' + request.auth.uid + '.*');
+      allow create: if isSignedIn() && chatRoomId.matches('.*' + request.auth.uid + '.*') && 
+                    !isBlocked(chatRoomId.replace(request.auth.uid, '').replace('_', ''));
+      allow update, delete: if isSignedIn() && chatRoomId.matches('.*' + request.auth.uid + '.*');
+    }
+
+    // Ring signals — any signed-in user can write; owner reads own doc
+    match /ring_signals/{userId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Groups — members only
+    match /groups/{groupId} {
+      allow read, write: if isSignedIn() && (
+        resource == null || request.auth.uid in resource.data.members
+      );
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.members;
+    }
+
+    // Group Messages - members only
+    match /group_messages/{groupId}/messages/{messageId} {
+      allow read, write: if isSignedIn() &&
+        exists(/databases/$(database)/documents/groups/$(groupId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+    }
+
+    // Connections — participants only
+    match /connections/{connectionId} {
+      allow read: if isSignedIn() && (
+        (resource == null && connectionId.matches('.*' + request.auth.uid + '.*')) ||
+        (resource != null && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId))
+      );
+      allow create: if isSignedIn() && 
+        (request.auth.uid == request.resource.data.senderId || request.auth.uid == request.resource.data.receiverId);
+      allow update, delete: if isSignedIn() && (
+        request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId
+      );
+    }
+
+    // App Configuration - read-only for versioning
+    match /app_config/{configId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Missions — owner or members can read/write
+    match /missions/{missionId} {
+      allow read: if isSignedIn() && (
+        resource == null ||
+        request.auth.uid in resource.data.memberIds
+      );
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.memberIds;
+      allow update, delete: if isSignedIn() && request.auth.uid in resource.data.memberIds;
+    }
+
+    // Mission Tasks — any signed-in user who can read the parent mission
+    match /mission_tasks/{taskId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Expense Projects — members only
+    match /expense_projects/{projectId} {
+      allow read, write: if isSignedIn() && (
+        resource == null || request.auth.uid in resource.data.memberIds
+      );
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.memberIds;
+    }
+
+    // Expense Entries — participants of projects
+    match /expense_entries/{entryId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Group Messages parent doc (groupId level) — needed for queries
+    match /group_messages/{groupId} {
+      allow read, write: if isSignedIn() &&
+        exists(/databases/$(database)/documents/groups/$(groupId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+    }
+  }
+}

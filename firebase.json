@@ -1,1 +1,43 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"nadeem-home-puzzles","appId":"1:335430690673:android:1cc9514d167029681c38d0","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"nadeem-home-puzzles","configurations":{"android":"1:335430690673:android:1cc9514d167029681c38d0","ios":"1:335430690673:ios:6b304af2fdeccc201c38d0","web":"1:335430690673:web:363f994bc4a0792c1c38d0"}}}}}}
+{
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "functions": {
+    "source": "functions"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "nadeem-home-puzzles",
+          "appId": "1:335430690673:android:1cc9514d167029681c38d0",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "nadeem-home-puzzles",
+          "configurations": {
+            "android": "1:335430690673:android:1cc9514d167029681c38d0",
+            "ios": "1:335430690673:ios:6b304af2fdeccc201c38d0",
+            "web": "1:335430690673:web:363f994bc4a0792c1c38d0"
+          }
+        }
+      }
+    }
+  }
+}
