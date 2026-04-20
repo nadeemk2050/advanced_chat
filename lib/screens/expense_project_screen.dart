@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/expense_model.dart';
 import '../models/chat_models.dart';
 import '../services/expense_service.dart';
@@ -20,10 +21,42 @@ class _ExpenseProjectScreenState extends State<ExpenseProjectScreen> with Single
   final ExpenseService _service = ExpenseService();
   late TabController _tabController;
 
+  // Category management
+  List<String> _allCategories = ['travel', 'pettyCash', 'project', 'other'];
+  List<String> _recentCategories = ['project', 'travel', 'pettyCash', 'other'];
+
+  static const _kAllCatsKey = 'expense_categories';
+  static const _kRecentKey = 'expense_recent_categories';
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    final prefs = await SharedPreferences.getInstance();
+    final all = prefs.getStringList(_kAllCatsKey) ?? ['travel', 'pettyCash', 'project', 'other'];
+    final recent = prefs.getStringList(_kRecentKey) ?? List.from(all);
+    if (!mounted) return;
+    setState(() {
+      _allCategories = all;
+      _recentCategories = recent.where((c) => all.contains(c)).toList();
+    });
+  }
+
+  Future<void> _saveCategories() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_kAllCatsKey, _allCategories);
+    await prefs.setStringList(_kRecentKey, _recentCategories);
+  }
+
+  void _trackCategoryUsage(String cat) {
+    _recentCategories.remove(cat);
+    _recentCategories.insert(0, cat);
+    if (_recentCategories.length > 20) _recentCategories = _recentCategories.sublist(0, 20);
+    _saveCategories();
   }
 
   @override
@@ -248,11 +281,12 @@ class _ExpenseProjectScreenState extends State<ExpenseProjectScreen> with Single
   }
 
   Widget _buildInsightsTab() {
-    return StreamBuilder<Map<ExpenseCategory, double>>(
+    return StreamBuilder<Map<String, double>>(
       stream: _service.getCategoryBreakdown(widget.project.id),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final data = snapshot.data!;
+        final allKeys = {..._allCategories, ...data.keys}.toList();
         
         return Column(
           children: [
@@ -264,7 +298,7 @@ class _ExpenseProjectScreenState extends State<ExpenseProjectScreen> with Single
               height: 200,
               child: PieChart(
                 PieChartData(
-                  sections: data.entries.map((e) {
+                  sections: data.entries.where((e) => e.value > 0).map((e) {
                     return PieChartSectionData(
                       color: _getCategoryColor(e.key),
                       value: e.value,
@@ -280,11 +314,11 @@ class _ExpenseProjectScreenState extends State<ExpenseProjectScreen> with Single
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                children: ExpenseCategory.values.map((cat) {
+                children: allKeys.map((cat) {
                   return ListTile(
                     leading: Icon(_getCategoryIcon(cat), color: _getCategoryColor(cat)),
-                    title: Text(cat.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                    trailing: Text('\$${data[cat]?.toStringAsFixed(2) ?? "0.00"}', style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
+                    title: Text(cat.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    trailing: Text('\$${(data[cat] ?? 0).toStringAsFixed(2)}', style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
                   );
                 }).toList(),
               ),
@@ -295,28 +329,30 @@ class _ExpenseProjectScreenState extends State<ExpenseProjectScreen> with Single
     );
   }
 
-  Color _getCategoryColor(ExpenseCategory cat) {
-    switch (cat) {
-      case ExpenseCategory.travel: return Colors.blueAccent;
-      case ExpenseCategory.pettyCash: return Colors.greenAccent;
-      case ExpenseCategory.project: return Colors.orangeAccent;
-      case ExpenseCategory.other: return Colors.purpleAccent;
+  Color _getCategoryColor(String cat) {
+    switch (cat.toLowerCase()) {
+      case 'travel': return Colors.blueAccent;
+      case 'pettycash': return Colors.greenAccent;
+      case 'project': return Colors.orangeAccent;
+      case 'other': return Colors.purpleAccent;
+      default: return Colors.tealAccent;
     }
   }
 
-  IconData _getCategoryIcon(ExpenseCategory cat) {
-    switch (cat) {
-      case ExpenseCategory.travel: return Icons.flight_takeoff_rounded;
-      case ExpenseCategory.pettyCash: return Icons.payments_rounded;
-      case ExpenseCategory.project: return Icons.business_center_rounded;
-      case ExpenseCategory.other: return Icons.category_rounded;
+  IconData _getCategoryIcon(String cat) {
+    switch (cat.toLowerCase()) {
+      case 'travel': return Icons.flight_takeoff_rounded;
+      case 'pettycash': return Icons.payments_rounded;
+      case 'project': return Icons.business_center_rounded;
+      case 'other': return Icons.category_rounded;
+      default: return Icons.label_rounded;
     }
   }
 
   void _showAddEntryBottomSheet() {
     final titleController = TextEditingController();
     final amountController = TextEditingController();
-    ExpenseCategory selectedCategory = ExpenseCategory.project;
+    String selectedCategory = _recentCategories.isNotEmpty ? _recentCategories.first : 'project';
     EntryType selectedType = EntryType.payment;
 
     showModalBottomSheet(
@@ -325,57 +361,285 @@ class _ExpenseProjectScreenState extends State<ExpenseProjectScreen> with Single
       backgroundColor: ChatTheme.surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => Padding(
-          padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2)))),
-              const SizedBox(height: 16),
-              Text('NEW TRANSACTION', style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, fontSize: 18, color: ChatTheme.primary)),
-              const SizedBox(height: 24),
-              Row(
+        builder: (ctx, setS) {
+          final recentVisible = _recentCategories.take(7).toList();
+          final hasMore = _allCategories.length > 7 || _allCategories.any((c) => !recentVisible.contains(c));
+
+          return Padding(
+            padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 16),
+                Text('NEW TRANSACTION', style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, fontSize: 18, color: ChatTheme.primary)),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(child: InkWell(onTap: () => setS(() => selectedType = EntryType.payment), child: _buildTypeToggle('PAYMENT', EntryType.payment, selectedType, Colors.redAccent))),
+                    const SizedBox(width: 12),
+                    Expanded(child: InkWell(onTap: () => setS(() => selectedType = EntryType.receipt), child: _buildTypeToggle('RECEIPT', EntryType.receipt, selectedType, Colors.greenAccent))),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                TextField(controller: titleController, style: const TextStyle(color: Colors.black87), decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder())),
+                const SizedBox(height: 16),
+                TextField(controller: amountController, keyboardType: TextInputType.number, style: const TextStyle(color: Colors.black87), decoration: const InputDecoration(labelText: 'Amount', prefixText: '\$ ', border: OutlineInputBorder())),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Text('CATEGORY', style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 11, color: ChatTheme.textSecondary)),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () async {
+                        await _showManageCategoriesDialog();
+                        setS(() {});
+                      },
+                      child: Row(
+                        children: [
+                          const Icon(Icons.edit_outlined, size: 14, color: ChatTheme.primary),
+                          const SizedBox(width: 4),
+                          Text('MANAGE', style: GoogleFonts.montserrat(fontSize: 10, color: ChatTheme.primary, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    ...recentVisible.map((cat) => ChoiceChip(
+                      label: Text(cat.toUpperCase(), style: const TextStyle(fontSize: 9)),
+                      selected: selectedCategory == cat,
+                      onSelected: (_) => setS(() => selectedCategory = cat),
+                      selectedColor: ChatTheme.primary.withOpacity(0.2),
+                    )),
+                    if (hasMore)
+                      ActionChip(
+                        label: const Text('MORE ▼', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                        backgroundColor: Colors.white10,
+                        onPressed: () async {
+                          final chosen = await _showAllCategoriesSheet(ctx, selectedCategory);
+                          if (chosen != null) setS(() => selectedCategory = chosen);
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 32),
+                SizedBox(width: double.infinity, height: 54, child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: ChatTheme.primary, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                  onPressed: () async {
+                    if (titleController.text.isNotEmpty && amountController.text.isNotEmpty) {
+                      _trackCategoryUsage(selectedCategory);
+                      await _service.addEntry(
+                        projectId: widget.project.id,
+                        title: titleController.text,
+                        amount: double.tryParse(amountController.text) ?? 0,
+                        category: selectedCategory,
+                        type: selectedType,
+                        userName: widget.userName,
+                      );
+                      if (context.mounted) Navigator.pop(context);
+                    }
+                  },
+                  child: const Text('SUBMIT TRANSACTION', style: TextStyle(fontWeight: FontWeight.bold)),
+                )),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Shows a bottom sheet with ALL categories + add new option. Returns the chosen category.
+  Future<String?> _showAllCategoriesSheet(BuildContext ctx, String current) async {
+    return showModalBottomSheet<String>(
+      context: ctx,
+      backgroundColor: ChatTheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSS) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2))),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Row(
                 children: [
-                  Expanded(child: InkWell(onTap: () => setS(() => selectedType = EntryType.payment), child: _buildTypeToggle('PAYMENT', EntryType.payment, selectedType, Colors.redAccent))),
-                  const SizedBox(width: 12),
-                  Expanded(child: InkWell(onTap: () => setS(() => selectedType = EntryType.receipt), child: _buildTypeToggle('RECEIPT', EntryType.receipt, selectedType, Colors.greenAccent))),
+                  Text('ALL CATEGORIES', style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, fontSize: 14, color: ChatTheme.primary)),
+                  const Spacer(),
+                  TextButton.icon(
+                    icon: const Icon(Icons.add, size: 16, color: ChatTheme.primary),
+                    label: Text('ADD', style: GoogleFonts.montserrat(fontSize: 11, color: ChatTheme.primary, fontWeight: FontWeight.bold)),
+                    onPressed: () async {
+                      Navigator.pop(sheetCtx);
+                      await _showAddCategoryDialog();
+                    },
+                  ),
                 ],
               ),
-              const SizedBox(height: 24),
-              TextField(controller: titleController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder())),
-              const SizedBox(height: 16),
-              TextField(controller: amountController, keyboardType: TextInputType.number, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Amount', prefixText: '\$ ', border: OutlineInputBorder())),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                children: ExpenseCategory.values.map((cat) => ChoiceChip(
-                  label: Text(cat.name.toUpperCase(), style: const TextStyle(fontSize: 9)),
-                  selected: selectedCategory == cat,
-                  onSelected: (val) => setS(() => selectedCategory = cat),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                children: _allCategories.map((cat) => ListTile(
+                  dense: true,
+                  leading: Icon(_getCategoryIcon(cat), color: _getCategoryColor(cat), size: 20),
+                  title: Text(cat.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  trailing: cat == current ? const Icon(Icons.check_circle, color: ChatTheme.primary, size: 18) : null,
+                  onTap: () => Navigator.pop(sheetCtx, cat),
                 )).toList(),
               ),
-              const SizedBox(height: 32),
-              SizedBox(width: double.infinity, height: 54, child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: ChatTheme.primary, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Dialog to manage (rename/delete) categories and add new ones.
+  Future<void> _showManageCategoriesDialog() async {
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSS) => AlertDialog(
+          backgroundColor: ChatTheme.surface,
+          title: Row(
+            children: [
+              Text('MANAGE CATEGORIES', style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, fontSize: 13, color: ChatTheme.primary)),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline, color: ChatTheme.primary, size: 20),
+                tooltip: 'Add new category',
                 onPressed: () async {
-                  if (titleController.text.isNotEmpty && amountController.text.isNotEmpty) {
-                    await _service.addEntry(
-                      projectId: widget.project.id,
-                      title: titleController.text,
-                      amount: double.tryParse(amountController.text) ?? 0,
-                      category: selectedCategory,
-                      type: selectedType,
-                      userName: widget.userName,
-                    );
-                    if (context.mounted) Navigator.pop(context);
-                  }
+                  Navigator.pop(ctx);
+                  await _showAddCategoryDialog();
                 },
-                child: const Text('SUBMIT TRANSACTION', style: TextStyle(fontWeight: FontWeight.bold)),
-              )),
+              ),
             ],
           ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _allCategories.length,
+              itemBuilder: (ctx, i) {
+                final cat = _allCategories[i];
+                return ListTile(
+                  dense: true,
+                  leading: Icon(_getCategoryIcon(cat), color: _getCategoryColor(cat), size: 18),
+                  title: Text(cat.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white)),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 16, color: Colors.white54),
+                        tooltip: 'Rename',
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          await _showRenameCategoryDialog(cat, i);
+                        },
+                      ),
+                      if (_allCategories.length > 1)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+                          tooltip: 'Delete',
+                          onPressed: () {
+                            setState(() {
+                              _allCategories.removeAt(i);
+                              _recentCategories.remove(cat);
+                            });
+                            _saveCategories();
+                            setSS(() {});
+                          },
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('DONE')),
+          ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _showAddCategoryDialog() async {
+    final controller = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: ChatTheme.surface,
+        title: Text('NEW CATEGORY', style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, fontSize: 14, color: ChatTheme.primary)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          style: const TextStyle(color: Colors.black87),
+          decoration: const InputDecoration(hintText: 'Category name...', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: ChatTheme.primary, foregroundColor: Colors.black),
+            onPressed: () {
+              final name = controller.text.trim();
+              if (name.isNotEmpty && !_allCategories.contains(name)) {
+                setState(() => _allCategories.add(name));
+                _saveCategories();
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('ADD'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showRenameCategoryDialog(String oldName, int index) async {
+    final controller = TextEditingController(text: oldName);
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: ChatTheme.surface,
+        title: Text('RENAME CATEGORY', style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, fontSize: 14, color: ChatTheme.primary)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          style: const TextStyle(color: Colors.black87),
+          decoration: const InputDecoration(hintText: 'New name...', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: ChatTheme.primary, foregroundColor: Colors.black),
+            onPressed: () {
+              final name = controller.text.trim();
+              if (name.isNotEmpty && name != oldName) {
+                setState(() {
+                  _allCategories[index] = name;
+                  final ri = _recentCategories.indexOf(oldName);
+                  if (ri >= 0) _recentCategories[ri] = name;
+                });
+                _saveCategories();
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('SAVE'),
+          ),
+        ],
       ),
     );
   }
@@ -437,7 +701,7 @@ class _ExpenseProjectScreenState extends State<ExpenseProjectScreen> with Single
         content: TextField(
           controller: controller,
           keyboardType: TextInputType.number,
-          style: const TextStyle(color: Colors.white),
+          style: const TextStyle(color: Colors.black87),
           decoration: const InputDecoration(labelText: 'Budget Limit', prefixText: '\$ ', border: OutlineInputBorder()),
         ),
         actions: [

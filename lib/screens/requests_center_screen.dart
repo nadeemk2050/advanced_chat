@@ -154,7 +154,7 @@ class _RequestsCenterScreenState extends State<RequestsCenterScreen> {
               Expanded(
                 child: Text(
                   name,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
                 ),
               ),
               IconButton(
@@ -206,7 +206,7 @@ class _RequestsCenterScreenState extends State<RequestsCenterScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(inv['groupName'] ?? 'Unnamed Group', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                Text(inv['groupName'] ?? 'Unnamed Group', style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
                 const Text('Wants you to join', style: TextStyle(color: Colors.white54, fontSize: 12)),
               ],
             ),

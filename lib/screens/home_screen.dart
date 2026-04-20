@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:confetti/confetti.dart';
+import '../services/mission_service.dart';
+import '../models/mission_model.dart';
 import '../services/database_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -32,6 +35,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   final _presenceService = PresenceService();
+  final _updateService = UpdateService();
   final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
   late TabController _tabController;
   String _searchQuery = "";
@@ -52,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _presenceService.activate();
-    unawaited(UpdateService().checkForUpdates(context));
+    unawaited(_updateService.checkForUpdates(context));
     NotificationService().init();
     _initSharing();
   }
@@ -107,7 +111,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ADVANCED CHAT'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('ADVANCED CHAT'),
+            const SizedBox(width: 6),
+            Text('v${_updateService.currentVersion}',
+                style: const TextStyle(fontSize: 10, color: ChatTheme.primary, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 2),
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _updateService.checkForUpdates(context),
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(Icons.refresh_rounded, size: 14, color: ChatTheme.primary),
+              ),
+            ),
+          ],
+        ),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -202,20 +223,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ],
       ),
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            _buildSearchBar(),
-            Expanded(
-              child: _searchQuery.isEmpty 
-                  ? TabBarView(
-                      controller: _tabController,
-                      children: [
-                        _ChatsTab(searchQuery: _searchQuery, usersStream: _usersStream),
-                        _MembersTab(searchQuery: _searchQuery, usersStream: _usersStream),
-                      ],
-                    )
-                  : GlobalSearchScreen(query: _searchQuery),
+            Column(
+              children: [
+                _buildSearchBar(),
+                Expanded(
+                  child: _searchQuery.isEmpty 
+                      ? TabBarView(
+                          controller: _tabController,
+                          children: [
+                            _ChatsTab(searchQuery: _searchQuery, usersStream: _usersStream),
+                            _MembersTab(searchQuery: _searchQuery, usersStream: _usersStream),
+                          ],
+                        )
+                      : GlobalSearchScreen(query: _searchQuery),
+                ),
+              ],
             ),
+            _buildVictoryListener(),
           ],
         ),
       ),
@@ -223,6 +249,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GroupCreatorScreen())),
         child: const Icon(Icons.group_add_rounded),
       ),
+    );
+  }
+
+  Widget _buildVictoryListener() {
+    return StreamBuilder<List<Mission>>(
+      stream: MissionService().getMissions(),
+      builder: (context, snap) {
+        final missions = snap.data ?? [];
+        final celebrationNeeded = missions.where((m) => m.isCompleted && !m.victoryCelebratedBy.contains(currentUserId)).toList();
+        
+        if (celebrationNeeded.isEmpty) return const SizedBox.shrink();
+        final mission = celebrationNeeded.first;
+
+        return _VictoryCeremonyOverlay(
+          mission: mission,
+          onClose: () => MissionService().markVictoryCelebrated(mission.id),
+        );
+      },
     );
   }
 
@@ -380,13 +424,14 @@ class _ChatsTabState extends State<_ChatsTab> with AutomaticKeepAliveClientMixin
                                     .where((d) {
                                       final p = List<String>.from(d.data()['participants'] ?? []);
                                       final otherId = p.firstWhere((id) => id != currentUserId, orElse: () => '');
+                                      if (otherId.isEmpty) return false; // skip chats with unknown/deleted users
                                       return acceptedIds.isEmpty || acceptedIds.contains(otherId);
                                     })
                                     .map((d) {
                                       final p = List<String>.from(d.data()['participants'] ?? []);
                                       final otherId = p.firstWhere((id) => id != currentUserId, orElse: () => '');
                                       final user = usersById[otherId];
-                                      if (user == null) return const SizedBox.shrink();
+                                      if (user == null || user.uid.isEmpty) return const SizedBox.shrink();
                                       if (!user.name.toLowerCase().contains(widget.searchQuery.toLowerCase())) return const SizedBox.shrink();
                                       return _buildChatThreadTile(context, user, d.data());
                                     }),
@@ -591,39 +636,34 @@ class _ChatsTabState extends State<_ChatsTab> with AutomaticKeepAliveClientMixin
 
   Widget _buildGroupTile(BuildContext context, GroupModel group) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
       decoration: BoxDecoration(
         color: ChatTheme.surface,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
+        borderRadius: BorderRadius.circular(12),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.all(12),
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GroupChatScreen(group: group))),
         leading: CircleAvatar(
-          radius: 28,
+          radius: 18,
           backgroundColor: ChatTheme.primary.withOpacity(0.1),
           backgroundImage: (group.groupPhotoUrl != null && group.groupPhotoUrl!.isNotEmpty) ? NetworkImage(group.groupPhotoUrl!) : null,
           child: (group.groupPhotoUrl == null || group.groupPhotoUrl!.isEmpty)
-              ? const Icon(Icons.group_rounded, color: ChatTheme.primary, size: 30)
+              ? const Icon(Icons.group_rounded, color: ChatTheme.primary, size: 18)
               : null,
         ),
         title: Text(
           group.name,
-          style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, color: ChatTheme.textPrimary, fontSize: 16),
+          style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, color: ChatTheme.textPrimary, fontSize: 13),
         ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            group.lastMessage ?? 'Group created',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.montserrat(color: ChatTheme.textSecondary, fontSize: 13),
-          ),
+        subtitle: Text(
+          group.lastMessage ?? 'Group created',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.montserrat(color: ChatTheme.textSecondary, fontSize: 11),
         ),
-        trailing: const Icon(Icons.chevron_right_rounded, color: ChatTheme.primary),
+        trailing: const Icon(Icons.chevron_right_rounded, color: ChatTheme.primary, size: 18),
       ),
     );
   }
@@ -785,6 +825,111 @@ class GlobalSearchScreen extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _VictoryCeremonyOverlay extends StatefulWidget {
+  final Mission mission;
+  final VoidCallback onClose;
+  const _VictoryCeremonyOverlay({required this.mission, required this.onClose});
+
+  @override
+  State<_VictoryCeremonyOverlay> createState() => _VictoryCeremonyOverlayState();
+}
+
+class _VictoryCeremonyOverlayState extends State<_VictoryCeremonyOverlay> {
+  late ConfettiController _confetti;
+
+  @override
+  void initState() {
+    super.initState();
+    _confetti = ConfettiController(duration: const Duration(seconds: 5));
+    _confetti.play();
+  }
+
+  @override
+  void dispose() {
+    _confetti.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withOpacity(0.9),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          ConfettiWidget(
+            confettiController: _confetti,
+            blastDirectionality: BlastDirectionality.explosive,
+            shouldLoop: true,
+            colors: const [Colors.orange, Colors.amber, Colors.blue, Colors.pink],
+          ),
+          Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.emoji_events_rounded, color: Colors.amber, size: 100),
+                const SizedBox(height: 24),
+                Text(
+                  'MISSION ACCOMPLISHED!',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.montserrat(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(color: Colors.amber, borderRadius: BorderRadius.circular(30)),
+                  child: Text(
+                    widget.mission.title.toUpperCase(),
+                    style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.black, fontSize: 16),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                const Text(
+                  'COMPLETED BY:',
+                  style: TextStyle(color: Colors.white70, fontSize: 12, letterSpacing: 1.5, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  widget.mission.completedByUserName?.toUpperCase() ?? 'TEAM HERO',
+                  style: GoogleFonts.montserrat(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.orangeAccent),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'TOTAL MARKS REWARDED:',
+                  style: TextStyle(color: Colors.white70, fontSize: 12, letterSpacing: 1.5),
+                ),
+                Text(
+                  '${widget.mission.totalRewardedPoints} PTS',
+                  style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white),
+                ),
+                const SizedBox(height: 48),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: widget.onClose,
+                    child: const Text('AWESOME! CLAIM MY VIEW', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

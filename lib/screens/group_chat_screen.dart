@@ -704,6 +704,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 Expanded(
                   child: TextField(
                     controller: _messageController,
+                    onSubmitted: (_) => _sendMessage(),
                     decoration: InputDecoration(
                       hintText: 'Message',
                       fillColor: ChatTheme.surface,
@@ -835,7 +836,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: controller,
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+              style: const TextStyle(color: Colors.black87, fontSize: 12),
               decoration: const InputDecoration(hintText: 'Paste Key here...', border: OutlineInputBorder()),
             ),
           ],

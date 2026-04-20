@@ -83,7 +83,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     _listenSenderRingStatus();
     
     // Ensure the chat room exists and is synced for new users
-    _chatService.syncChatThread(widget.otherUser.uid);
+    if (widget.otherUser.uid.isNotEmpty) {
+      _chatService.syncChatThread(widget.otherUser.uid);
+    }
 
     // M2: track audio player state changes
     _audioPlayer.onPlayerStateChanged.listen((state) {
@@ -109,6 +111,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   void _sendMessage() {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
+    if (widget.otherUser.uid.isEmpty) return; // guard: unknown user
     _chatService.sendMessage(
       text,
       widget.otherUser.uid,
@@ -509,7 +512,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           ? TextField(
               controller: _searchController,
               autofocus: true,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.black87),
               decoration: const InputDecoration(hintText: 'Search chat...', border: InputBorder.none),
               onChanged: (val) => setState(() => _internalSearchQuery = val),
             )
@@ -583,14 +586,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               MaterialPageRoute(builder: (_) => StarredMessagesScreen(otherUser: widget.otherUser)),
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.photo_library_outlined),
-            tooltip: 'Media Gallery',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => MediaGalleryScreen(otherUser: widget.otherUser)),
-            ),
-          ),
           StreamBuilder<ConnectionModel?>(
             stream: _chatService.getConnection(widget.otherUser.uid),
             builder: (context, connSnap) {
@@ -601,7 +596,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       ? Icons.notifications_off_rounded
                       : Icons.notifications_active_rounded,
                   color: !isFriend 
-                    ? Colors.white24
+                    ? Colors.black12
                     : (_isSenderRinging ? Colors.redAccent : Colors.orangeAccent),
                 ),
                 tooltip: !isFriend ? 'Add friend to ring' : (_isSenderRinging ? 'Cancel Ring' : 'Send Wake-up Ring'),
@@ -617,6 +612,29 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               _isSearching = !_isSearching;
               if (!_isSearching) _internalSearchQuery = '';
             }),
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (val) {
+              if (val == 'gallery') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => MediaGalleryScreen(otherUser: widget.otherUser)),
+                );
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'gallery',
+                child: Row(
+                  children: [
+                    Icon(Icons.photo_library_outlined, color: Colors.blueAccent),
+                    SizedBox(width: 12),
+                    Text('Media Gallery', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1295,6 +1313,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     child: TextField(
                       controller: _messageController,
                       onChanged: _onTypingChanged,
+                      onSubmitted: (_) => _sendMessage(),
                       decoration: InputDecoration(
                         hintText: 'Message',
                         fillColor: ChatTheme.surface,
@@ -1306,15 +1325,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       ),
                     ),
                   ),
-                // Date Search Icon
-                IconButton(
-                  icon: const Icon(Icons.calendar_month_rounded, color: ChatTheme.primary),
-                  onPressed: _showDatePickerJump,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.search_rounded),
-                  onPressed: () => setState(() => _isSearching = !_isSearching),
-                ),
                 const SizedBox(width: 8),
                 AudioRecorderWidget(
                   onStart: () {
@@ -1591,7 +1601,7 @@ class StarredMessagesScreen extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Text(m.text, style: const TextStyle(color: Colors.white)),
+                    Text(m.text, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600)),
                   ],
                 ),
               );

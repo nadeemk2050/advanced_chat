@@ -123,17 +123,21 @@ class _EliteStatusTab extends StatelessWidget {
               // ── Stats Row ──
               Row(
                 children: [
-                  Expanded(child: _StatCard('📋', 'MISSIONS', '$total', Colors.blueAccent)),
+                  Expanded(child: _StatCard('📋', 'MISSIONS', '$total', Colors.blueAccent, onTap: () => _showMissionsSheet(context, 'ALL MISSIONS', missions))),
                   const SizedBox(width: 12),
-                  Expanded(child: _StatCard('✅', 'DONE', '$completed', Colors.greenAccent)),
+                  Expanded(child: _StatCard('✅', 'DONE', '$completed', Colors.greenAccent, onTap: () => _showMissionsSheet(context, 'COMPLETED MISSIONS', missions.where((m) => m.isCompleted).toList()))),
                   const SizedBox(width: 12),
-                  Expanded(child: _StatCard('🤝', 'TEAM', '$teamMissions', Colors.purpleAccent)),
+                  Expanded(child: _StatCard('🤝', 'TEAM', '$teamMissions', Colors.purpleAccent, onTap: () => _showMissionsSheet(context, 'TEAM MISSIONS', missions.where((m) => m.type == MissionType.teamMission || m.type == MissionType.teamTask).toList()))),
                 ],
               ),
               const SizedBox(height: 24),
 
               // ── Productivity Heatmap ──
               _HeatmapGrid(missions: missions),
+              const SizedBox(height: 24),
+
+              // ── Score Breakdown ──
+              _ScoreBreakdown(missions: missions, score: eliteScore),
               const SizedBox(height: 24),
 
               // ── Progress Bar ──
@@ -152,6 +156,15 @@ class _EliteStatusTab extends StatelessWidget {
     if (score >= 35) return _Rank('🥇 GOLD', const Color(0xFFFFC107), 'TOP 30%');
     if (score >= 20) return _Rank('🥈 SILVER', const Color(0xFFB0BEC5), 'TOP 50%');
     return _Rank('🥉 BRONZE', const Color(0xFFCD7F32), 'RISING');
+  }
+
+  void _showMissionsSheet(BuildContext context, String title, List<Mission> list) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _MissionListSheet(title: title, missions: list),
+    );
   }
 }
 
@@ -282,32 +295,328 @@ class _StatCard extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-  const _StatCard(this.icon, this.label, this.value, this.color);
+  final VoidCallback? onTap;
+  const _StatCard(this.icon, this.label, this.value, this.color, {this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: ChatTheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.3)),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: ChatTheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Text(icon, style: const TextStyle(fontSize: 24)),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: GoogleFonts.montserrat(
+                  fontSize: 22, fontWeight: FontWeight.w900, color: color),
+            ),
+            Text(
+              label,
+              style: GoogleFonts.montserrat(
+                  fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1),
+            ),
+            const SizedBox(height: 4),
+            Icon(Icons.arrow_drop_down_rounded, color: color.withOpacity(0.6), size: 16),
+          ],
+        ),
       ),
-      child: Column(
-        children: [
-          Text(icon, style: const TextStyle(fontSize: 24)),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: GoogleFonts.montserrat(
-                fontSize: 22, fontWeight: FontWeight.w900, color: color),
-          ),
-          Text(
-            label,
-            style: GoogleFonts.montserrat(
-                fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1),
-          ),
-        ],
+    );
+  }
+}
+
+// ── Mission List Bottom Sheet ──
+class _MissionListSheet extends StatelessWidget {
+  final String title;
+  final List<Mission> missions;
+  const _MissionListSheet({required this.title, required this.missions});
+
+  String _typeLabel(MissionType t) {
+    switch (t) {
+      case MissionType.personalTask: return 'Personal Task';
+      case MissionType.personalMission: return 'Personal Mission';
+      case MissionType.teamTask: return 'Team Task';
+      case MissionType.teamMission: return 'Team Mission';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.65,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (_, controller) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Text(title,
+                    style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, fontSize: 14, color: Colors.black, letterSpacing: 1)),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(color: ChatTheme.primary.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+                    child: Text('${missions.length}', style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, fontSize: 13, color: ChatTheme.primary)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            Expanded(
+              child: missions.isEmpty
+                  ? Center(child: Text('No missions here yet.', style: GoogleFonts.montserrat(color: Colors.grey)))
+                  : ListView.separated(
+                      controller: controller,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      itemCount: missions.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (_, i) {
+                        final m = missions[i];
+                        final typeStr = _typeLabel(m.type);
+                        final dateStr = '${m.createdAt.day}/${m.createdAt.month}/${m.createdAt.year}';
+                        final completedStr = m.completedAt != null
+                            ? '${m.completedAt!.day}/${m.completedAt!.month}/${m.completedAt!.year}'
+                            : null;
+                        return Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: m.isCompleted ? Colors.green.withOpacity(0.06) : Colors.grey.withOpacity(0.06),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: m.isCompleted ? Colors.green.withOpacity(0.3) : Colors.black12),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(m.isCompleted ? '✅' : '📋', style: const TextStyle(fontSize: 20)),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(m.title,
+                                      style: GoogleFonts.montserrat(fontWeight: FontWeight.w800, fontSize: 13, color: Colors.black,
+                                        decoration: m.isCompleted ? TextDecoration.lineThrough : null)),
+                                    const SizedBox(height: 4),
+                                    Text(typeStr, style: GoogleFonts.montserrat(fontSize: 10, color: ChatTheme.primary, fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 2),
+                                    Text('Created: $dateStr', style: GoogleFonts.montserrat(fontSize: 10, color: Colors.grey)),
+                                    if (completedStr != null)
+                                      Text('Completed: $completedStr', style: GoogleFonts.montserrat(fontSize: 10, color: Colors.green[700])),
+                                    if (m.totalRewardedPoints > 0)
+                                      Text('🏅 ${m.totalRewardedPoints} pts earned', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orangeAccent)),
+                                    if (m.completedByUserName != null)
+                                      Text('Done by: ${m.completedByUserName}', style: GoogleFonts.montserrat(fontSize: 10, color: Colors.blueAccent)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Score Breakdown ──
+class _ScoreBreakdown extends StatelessWidget {
+  final List<Mission> missions;
+  final int score;
+  const _ScoreBreakdown({required this.missions, required this.score});
+
+  @override
+  Widget build(BuildContext context) {
+    final completed = missions.where((m) => m.isCompleted).toList();
+    final teamMissions = missions.where((m) => m.type == MissionType.teamMission || m.type == MissionType.teamTask).toList();
+    final completionRate = missions.isEmpty ? 0.0 : (completed.length / missions.length).clamp(0.0, 1.0);
+    final completionPoints = (completionRate * 60).toInt();
+    final teamPoints = (teamMissions.length * 5).clamp(0, 40);
+
+    return GestureDetector(
+      onTap: () => showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _ScoreDetailSheet(missions: missions, score: score),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: ChatTheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: ChatTheme.primary.withOpacity(0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('HOW YOU EARNED YOUR SCORE', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w900, color: ChatTheme.primary, letterSpacing: 1)),
+                const Spacer(),
+                Icon(Icons.info_outline_rounded, size: 16, color: ChatTheme.primary),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _ScoreLine('Completion Rate (${(completionRate * 100).toInt()}%)', '$completionPoints pts', Colors.greenAccent),
+            const SizedBox(height: 6),
+            _ScoreLine('Team Missions (${teamMissions.length} × 5)', '$teamPoints pts', Colors.purpleAccent),
+            const Divider(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('TOTAL ELITE SCORE', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.black)),
+                Text('$score / 100', style: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w900, color: ChatTheme.primary)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text('Tap to see full task-by-task breakdown →', style: GoogleFonts.montserrat(fontSize: 10, color: Colors.grey)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScoreLine extends StatelessWidget {
+  final String label;
+  final String pts;
+  final Color color;
+  const _ScoreLine(this.label, this.pts, this.color);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
+        const SizedBox(width: 8),
+        Expanded(child: Text(label, style: GoogleFonts.montserrat(fontSize: 11, color: Colors.black87))),
+        Text(pts, style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.black)),
+      ],
+    );
+  }
+}
+
+class _ScoreDetailSheet extends StatelessWidget {
+  final List<Mission> missions;
+  final int score;
+  const _ScoreDetailSheet({required this.missions, required this.score});
+
+  @override
+  Widget build(BuildContext context) {
+    final completed = missions.where((m) => m.isCompleted).toList()
+      ..sort((a, b) => (b.completedAt ?? DateTime(0)).compareTo(a.completedAt ?? DateTime(0)));
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.70,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (_, controller) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text('SCORE BREAKDOWN', style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, fontSize: 14, color: Colors.black, letterSpacing: 1)),
+            ),
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text('Tasks & missions that contributed to your $score pts', style: GoogleFonts.montserrat(fontSize: 11, color: Colors.grey)),
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            Expanded(
+              child: completed.isEmpty
+                  ? Center(child: Text('Complete missions to earn points.', style: GoogleFonts.montserrat(color: Colors.grey)))
+                  : ListView.separated(
+                      controller: controller,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      itemCount: completed.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (_, i) {
+                        final m = completed[i];
+                        final isTeam = m.type == MissionType.teamMission || m.type == MissionType.teamTask;
+                        final completedStr = m.completedAt != null
+                            ? '${m.completedAt!.day}/${m.completedAt!.month}/${m.completedAt!.year}'
+                            : '';
+                        return Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: isTeam ? Colors.purple.withOpacity(0.05) : Colors.green.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: isTeam ? Colors.purple.withOpacity(0.2) : Colors.green.withOpacity(0.2)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(isTeam ? '🤝' : '✅', style: const TextStyle(fontSize: 20)),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(m.title, style: GoogleFonts.montserrat(fontWeight: FontWeight.w800, fontSize: 13, color: Colors.black)),
+                                    if (completedStr.isNotEmpty)
+                                      Text('Completed: $completedStr', style: GoogleFonts.montserrat(fontSize: 10, color: Colors.grey)),
+                                    if (m.completedByUserName != null)
+                                      Text('By: ${m.completedByUserName}', style: GoogleFonts.montserrat(fontSize: 10, color: Colors.blueAccent)),
+                                  ],
+                                ),
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  if (m.totalRewardedPoints > 0)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(color: Colors.orange.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+                                      child: Text('+${m.totalRewardedPoints}pts', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.orange)),
+                                    ),
+                                  if (isTeam)
+                                    Container(
+                                      margin: const EdgeInsets.only(top: 4),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(color: Colors.purple.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+                                      child: Text('+5 elite', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.purple)),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -20,6 +20,9 @@ class Mission {
   final DateTime? completedAt;
   final bool isBigThree;
   final DateTime? bigThreeDate;
+  final List<String> victoryCelebratedBy; // Users who have seen the ceremony
+  final String? completedByUserName;
+  final int totalRewardedPoints;
 
   Mission({
     required this.id,
@@ -34,6 +37,9 @@ class Mission {
     this.completedAt,
     this.isBigThree = false,
     this.bigThreeDate,
+    this.victoryCelebratedBy = const [],
+    this.completedByUserName,
+    this.totalRewardedPoints = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -50,6 +56,9 @@ class Mission {
       'completedAt': completedAt?.toIso8601String(),
       'isBigThree': isBigThree,
       'bigThreeDate': bigThreeDate?.toIso8601String(),
+      'victoryCelebratedBy': victoryCelebratedBy,
+      'completedByUserName': completedByUserName,
+      'totalRewardedPoints': totalRewardedPoints,
     };
   }
 
@@ -71,6 +80,9 @@ class Mission {
       bigThreeDate: map['bigThreeDate'] != null
           ? DateTime.tryParse(map['bigThreeDate'])
           : null,
+      victoryCelebratedBy: List<String>.from(map['victoryCelebratedBy'] ?? []),
+      completedByUserName: map['completedByUserName'],
+      totalRewardedPoints: map['totalRewardedPoints'] ?? 0,
     );
   }
 }
@@ -81,6 +93,7 @@ class MissionTask {
   final String title;
   final bool isCompleted;
   final String? completedByName;
+  final String? completedByUid; 
   final String addedByName;
   final String addedByUid;
   final String? assignedToUid;
@@ -96,6 +109,12 @@ class MissionTask {
   final bool isTimerRunning;
   final DateTime? lastStartTime;
   final int totalTimeSeconds;
+  final String? parentId; 
+  final int pointsRewards; 
+  final int approvedPoints; // Given by Creator
+  final String? approvedByUid;
+  final String? approvedByName;
+  final String? notes;
 
   MissionTask({
     required this.id,
@@ -103,6 +122,7 @@ class MissionTask {
     required this.title,
     this.isCompleted = false,
     this.completedByName,
+    this.completedByUid,
     required this.addedByName,
     required this.addedByUid,
     this.assignedToUid,
@@ -118,6 +138,12 @@ class MissionTask {
     this.isTimerRunning = false,
     this.lastStartTime,
     this.totalTimeSeconds = 0,
+    this.parentId,
+    this.pointsRewards = 0,
+    this.approvedPoints = 0,
+    this.approvedByUid,
+    this.approvedByName,
+    this.notes,
   });
 
   Duration get totalDuration {
@@ -135,6 +161,7 @@ class MissionTask {
       'title': title,
       'isCompleted': isCompleted,
       'completedByName': completedByName,
+      'completedByUid': completedByUid,
       'addedByName': addedByName,
       'addedByUid': addedByUid,
       'assignedToUid': assignedToUid,
@@ -150,6 +177,12 @@ class MissionTask {
       'isTimerRunning': isTimerRunning,
       'lastStartTime': lastStartTime?.toIso8601String(),
       'totalTimeSeconds': totalTimeSeconds,
+      'parentId': parentId,
+      'pointsRewards': pointsRewards,
+      'approvedPoints': approvedPoints,
+      'approvedByUid': approvedByUid,
+      'approvedByName': approvedByName,
+      'notes': notes,
     };
   }
 
@@ -160,6 +193,7 @@ class MissionTask {
       title: map['title'] ?? '',
       isCompleted: map['isCompleted'] ?? false,
       completedByName: map['completedByName'],
+      completedByUid: map['completedByUid'],
       addedByName: map['addedByName'] ?? '',
       addedByUid: map['addedByUid'] ?? '',
       assignedToUid: map['assignedToUid'],
@@ -175,6 +209,12 @@ class MissionTask {
       isTimerRunning: map['isTimerRunning'] ?? false,
       lastStartTime: map['lastStartTime'] != null ? DateTime.parse(map['lastStartTime']) : null,
       totalTimeSeconds: map['totalTimeSeconds'] ?? 0,
+      parentId: map['parentId'],
+      pointsRewards: map['pointsRewards'] ?? 0,
+      approvedPoints: map['approvedPoints'] ?? 0,
+      approvedByUid: map['approvedByUid'],
+      approvedByName: map['approvedByName'],
+      notes: map['notes'],
     );
   }
 }

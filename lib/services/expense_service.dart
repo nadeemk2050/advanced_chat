@@ -90,9 +90,9 @@ class ExpenseService {
   }
 
   // GATES'S CATEGORY HEATMAP DATA
-  Stream<Map<ExpenseCategory, double>> getCategoryBreakdown(String projectId) {
+  Stream<Map<String, double>> getCategoryBreakdown(String projectId) {
     return getEntries(projectId).map((entries) {
-      Map<ExpenseCategory, double> map = {for (var cat in ExpenseCategory.values) cat : 0.0};
+      Map<String, double> map = {};
       for (var e in entries) {
         if (e.type == EntryType.payment) {
           map[e.category] = (map[e.category] ?? 0) + e.amount;
@@ -125,7 +125,7 @@ class ExpenseService {
     required String projectId,
     required String title,
     required double amount,
-    required ExpenseCategory category,
+    required String category,
     required EntryType type,
     required String userName,
     String? note,

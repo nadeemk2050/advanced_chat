@@ -15,6 +15,7 @@ class UserModel {
   final DateTime lastSeen;
   final List<String> blockedUsers;
   final bool isVisibleInMembersList;
+  final int totalPoints;
 
   UserModel({
     required this.uid,
@@ -26,6 +27,7 @@ class UserModel {
     required this.lastSeen,
     required this.blockedUsers,
     this.isVisibleInMembersList = true,
+    this.totalPoints = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -39,6 +41,7 @@ class UserModel {
       'lastSeen': lastSeen.millisecondsSinceEpoch,
       'blockedUsers': blockedUsers,
       'isVisibleInMembersList': isVisibleInMembersList,
+      'totalPoints': totalPoints,
     };
   }
 
@@ -53,6 +56,7 @@ class UserModel {
       lastSeen: _parseTimestamp(map['lastSeen']),
       blockedUsers: List<String>.from(map['blockedUsers'] ?? []),
       isVisibleInMembersList: map['isVisibleInMembersList'] ?? true,
+      totalPoints: map['totalPoints'] ?? 0,
     );
   }
 

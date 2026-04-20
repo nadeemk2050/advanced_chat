@@ -132,14 +132,14 @@ class _ExpenseDashboardState extends State<ExpenseDashboard> {
           children: [
             TextField(
               controller: titleController,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.black87),
               decoration: const InputDecoration(hintText: 'e.g., Dubai Trip 2026', labelText: 'Project Title', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: budgetController,
               keyboardType: TextInputType.number,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.black87),
               decoration: const InputDecoration(hintText: 'e.g., 5000', labelText: 'Budget (Optional)', prefixText: '\$ ', border: OutlineInputBorder()),
             ),
           ],

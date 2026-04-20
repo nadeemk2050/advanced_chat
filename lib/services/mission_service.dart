@@ -47,7 +47,7 @@ class MissionService {
     await doc.set(mission.toMap());
   }
 
-  Future<void> addTask(String missionId, String title, String userName, {DateTime? dueDate}) async {
+  Future<void> addTask(String missionId, String title, String userName, {DateTime? dueDate, String? parentId, int pointsRewards = 0}) async {
     final doc = _db.collection('mission_tasks').doc();
     final task = MissionTask(
       id: doc.id,
@@ -57,21 +57,60 @@ class MissionService {
       addedByUid: _uid,
       dueDate: dueDate,
       isCompleted: false,
+      parentId: parentId,
+      pointsRewards: pointsRewards,
     );
     await doc.set(task.toMap());
   }
 
   Future<void> toggleTaskStatus(String taskId, bool isCompleted, String userName) async {
+    final uid = _uid;
     await _db.collection('mission_tasks').doc(taskId).update({
       'isCompleted': isCompleted,
       'completedByName': isCompleted ? userName : null,
+      'completedByUid': isCompleted ? uid : null,
+      'needsApproval': false, // Personal tasks don't need approval
+      'isApproved': isCompleted,
+      'approvedPoints': isCompleted ? 0 : 0, // Will be set by logic below
     });
+
+    if (isCompleted) {
+      final doc = await _db.collection('mission_tasks').doc(taskId).get();
+      final task = MissionTask.fromMap(doc.data()!);
+      
+      // For personal tasks, give full points immediately
+      if (task.pointsRewards > 0) {
+        await _db.collection('users').doc(uid).update({
+          'totalPoints': FieldValue.increment(task.pointsRewards),
+        });
+        await _db.collection('mission_tasks').doc(taskId).update({
+          'approvedPoints': task.pointsRewards,
+        });
+      }
+    }
   }
 
-  Future<void> completeMission(String missionId) async {
+  Future<void> completeMission(String missionId, String userName) async {
+    final tasksSnap = await _db.collection('mission_tasks').where('missionId', isEqualTo: missionId).get();
+    int totalApproved = 0;
+    for (var d in tasksSnap.docs) {
+      totalApproved += (d.data()['approvedPoints'] as int? ?? 0);
+    }
+
     await _db.collection('missions').doc(missionId).update({
       'isCompleted': true,
       'completedAt': DateTime.now().toIso8601String(),
+      'completedByUserName': userName,
+      'totalRewardedPoints': totalApproved,
+      'victoryCelebratedBy': [], // Reset so everyone sees the new celebration
+    });
+  }
+
+  Future<void> markVictoryCelebrated(String missionId) async {
+    final uid = _uid;
+    if (uid.isEmpty) return;
+    await _db.collection('missions').doc(missionId).update({
+      'victoryCelebratedBy': FieldValue.arrayUnion([uid]),
     });
   }
 
@@ -86,6 +125,14 @@ class MissionService {
 
   Future<void> deleteTask(String taskId) async {
     await _db.collection('mission_tasks').doc(taskId).delete();
+  }
+
+  Future<void> renameMission(String missionId, String newTitle) async {
+    await _db.collection('missions').doc(missionId).update({'title': newTitle});
+  }
+
+  Future<void> renameTask(String taskId, String newTitle) async {
+    await _db.collection('mission_tasks').doc(taskId).update({'title': newTitle});
   }
 
   Stream<List<UserModel>> getFriends() {
@@ -142,14 +189,57 @@ class MissionService {
     await _db.collection('mission_tasks').doc(taskId).update({
       'isCompleted': true,
       'completedByName': userName,
+      'completedByUid': _uid,
       'needsApproval': true,
     });
   }
 
-  Future<void> approveTask(String taskId) async {
+  Future<void> approveTask(String taskId, int marks, String creatorName) async {
+    final uid = _uid;
+    final doc = await _db.collection('mission_tasks').doc(taskId).get();
+    final task = MissionTask.fromMap(doc.data()!);
+    
     await _db.collection('mission_tasks').doc(taskId).update({
       'needsApproval': false,
       'isApproved': true,
+      'approvedPoints': marks,
+      'approvedByUid': uid,
+      'approvedByName': creatorName,
+    });
+
+    if (marks > 0 && task.completedByUid != null) {
+      await _db.collection('users').doc(task.completedByUid!).update({
+        'totalPoints': FieldValue.increment(marks),
+      });
+    }
+  }
+
+  Future<void> addTaskComment(String taskId, String text, String senderName) async {
+    final uid = _uid;
+    await _db.collection('mission_tasks').doc(taskId).collection('comments').add({
+      'text': text,
+      'senderId': uid,
+      'senderName': senderName,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Stream<List<Map<String, dynamic>>> getTaskComments(String taskId) {
+    return _db
+        .collection('mission_tasks')
+        .doc(taskId)
+        .collection('comments')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map((doc) => {
+              ...doc.data(),
+              'id': doc.id,
+            }).toList());
+  }
+
+  Future<void> updateTaskNotes(String taskId, String notes) async {
+    await _db.collection('mission_tasks').doc(taskId).update({
+      'notes': notes,
     });
   }
 

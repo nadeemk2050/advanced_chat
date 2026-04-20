@@ -193,13 +193,15 @@ class _PersonalHubScreenState extends State<PersonalHubScreen> with SingleTicker
           );
         }
 
+        final double screenWidth = MediaQuery.of(context).size.width;
+        final int crossAxisCount = screenWidth > 600 ? 2 : 1;
         return GridView.builder(
           padding: const EdgeInsets.all(16),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
-            childAspectRatio: 0.85,
+            childAspectRatio: crossAxisCount == 1 ? 2.5 : 0.85,
           ),
           itemCount: missions.length,
           itemBuilder: (context, index) => _buildMissionCard(missions[index]),
@@ -365,8 +367,8 @@ class _PersonalHubScreenState extends State<PersonalHubScreen> with SingleTicker
             children: [
               TextField(
                 controller: titleController,
-                style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
-                decoration: const InputDecoration(labelText: 'Mission Title', border: OutlineInputBorder()),
+                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                decoration: const InputDecoration(labelText: 'Mission Title', border: OutlineInputBorder(), labelStyle: TextStyle(color: Colors.black54)),
               ),
               const SizedBox(height: 16),
               const Text('TYPE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
@@ -445,8 +447,11 @@ class _MissionDetailSheet extends StatefulWidget {
 
 class _MissionDetailSheetState extends State<_MissionDetailSheet> {
   final TextEditingController _taskController = TextEditingController();
+  final TextEditingController _pointsController = TextEditingController(text: '0');
   final AIService _aiService = AIService();
   DateTime? _selectedDueDate;
+  String get _uid => FirebaseAuth.instance.currentUser?.uid ?? '';
+  final Set<String> _collapsedTaskIds = {}; // Track collapsed tasks
 
   @override
   void initState() {
@@ -457,6 +462,112 @@ class _MissionDetailSheetState extends State<_MissionDetailSheet> {
   Future<void> _loadAIConfig() async {
     final prefs = await SharedPreferences.getInstance();
     _aiService.setApiKey(prefs.getString('gemini_api_key') ?? '');
+  }
+
+  void _showRenameMissionDialog() {
+    final ctrl = TextEditingController(text: widget.mission.title);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('RENAME MISSION', style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, color: ChatTheme.primary, fontSize: 16)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          decoration: const InputDecoration(labelText: 'Mission Name', border: OutlineInputBorder(), labelStyle: TextStyle(color: Colors.black54)),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: ChatTheme.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            onPressed: () async {
+              final name = ctrl.text.trim();
+              if (name.isNotEmpty) {
+                await widget.service.renameMission(widget.mission.id, name);
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('SAVE'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRenameTaskDialog(MissionTask task) {
+    final ctrl = TextEditingController(text: task.title);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('RENAME TASK', style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, color: ChatTheme.primary, fontSize: 16)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          decoration: const InputDecoration(labelText: 'Task Name', border: OutlineInputBorder(), labelStyle: TextStyle(color: Colors.black54)),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: ChatTheme.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            onPressed: () async {
+              final name = ctrl.text.trim();
+              if (name.isNotEmpty) {
+                await widget.service.renameTask(task.id, name);
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('SAVE'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteTaskWithPassword(String taskId) async {
+    final passCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('DELETE TASK', style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, color: Colors.redAccent, fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter password to confirm deletion:', style: TextStyle(fontSize: 13, color: Colors.black87)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passCtrl,
+              autofocus: true,
+              obscureText: true,
+              style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
+              decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('DELETE'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      if (passCtrl.text == 'abcd') {
+        await widget.service.deleteTask(taskId);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Incorrect password. Task not deleted.'), backgroundColor: Colors.redAccent),
+          );
+        }
+      }
+    }
   }
 
   void _handleAddTask() async {
@@ -484,8 +595,10 @@ class _MissionDetailSheetState extends State<_MissionDetailSheet> {
       }
     }
 
-    widget.service.addTask(widget.mission.id, title, widget.userName, dueDate: _selectedDueDate);
+    final points = int.tryParse(_pointsController.text.trim()) ?? 0;
+    widget.service.addTask(widget.mission.id, title, widget.userName, dueDate: _selectedDueDate, pointsRewards: points);
     _taskController.clear();
+    _pointsController.text = '0';
     setState(() => _selectedDueDate = null);
   }
 
@@ -599,8 +712,9 @@ class _MissionDetailSheetState extends State<_MissionDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final double screenHeight = MediaQuery.of(context).size.height;
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
+      height: screenHeight,
       decoration: const BoxDecoration(
         color: ChatTheme.background,
         borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
@@ -619,77 +733,106 @@ class _MissionDetailSheetState extends State<_MissionDetailSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(widget.mission.title, style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, fontSize: 24, color: ChatTheme.primary)),
-                      Text(widget.mission.type.name.toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Text(
+                          widget.mission.title.toUpperCase(),
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 22,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: widget.mission.ownerId == _uid ? Colors.orange : Colors.blue,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              widget.mission.ownerId == _uid ? 'CREATOR' : 'TEAM MEMBER',
+                              style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(widget.mission.type.name.toUpperCase(), 
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                        ],
+                      ),
                     ],
                   ),
                 ),
-                if (widget.mission.type == MissionType.teamMission || widget.mission.type == MissionType.teamTask)
-                  IconButton(
-                    icon: const Icon(Icons.person_add_rounded, color: ChatTheme.primary),
-                    onPressed: _showAddMemberDialog,
-                  ),
-                IconButton(
-                  icon: Icon(
-                    widget.mission.isBigThree ? Icons.auto_awesome_rounded : Icons.auto_awesome_outlined,
-                    color: widget.mission.isBigThree ? Colors.orangeAccent : Colors.grey,
-                  ),
-                  tooltip: 'Add to Big 3 Focus',
-                  onPressed: () => widget.service.toggleBigThree(widget.mission.id, !widget.mission.isBigThree),
-                ),
-                // ── Complete Mission / Vault button ──
-                if (!widget.mission.isCompleted)
-                  IconButton(
-                    icon: const Icon(Icons.emoji_events_rounded, color: Colors.amber),
-                    tooltip: 'Complete & Vault Mission',
-                    onPressed: () async {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: Text('VAULT THIS MISSION?',
-                            style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, color: Colors.amber)),
-                          content: const Text('This will mark the mission as complete and archive it to your Trophy Room.'),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
-                              onPressed: () => Navigator.pop(ctx, true),
-                              child: const Text('VAULT IT 🏆'),
-                            ),
-                          ],
-                        ),
-                      );
-                      if (confirm == true) {
-                        await widget.service.completeMission(widget.mission.id);
-                        if (context.mounted) {
-                          Navigator.pop(context);
-                          CelebrationOverlay.show(context, title: '"${widget.mission.title}"\nVAULTED!');
+                StreamBuilder<List<MissionTask>>(
+                  stream: widget.service.getMissionTasks(widget.mission.id),
+                  builder: (context, taskSnap) {
+                    final allTasks = taskSnap.data ?? [];
+                    final needsVaulting = allTasks.isNotEmpty && allTasks.every((t) => t.isApproved);
+                    final isCreator = widget.mission.ownerId == _uid;
+
+                    return PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, color: Colors.black),
+                      onSelected: (val) async {
+                        switch (val) {
+                          case 'rename': _showRenameMissionDialog(); break;
+                          case 'invite': _showAddMemberDialog(); break;
+                          case 'big_three': 
+                            widget.service.toggleBigThree(widget.mission.id, !widget.mission.isBigThree); 
+                            break;
+                          case 'war_room':
+                            final chatId = await widget.service.ensureProjectChat(widget.mission);
+                            if (mounted) {
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => GroupChatScreen(
+                                group: GroupModel(
+                                  groupId: chatId,
+                                  name: 'WAR ROOM: ${widget.mission.title}',
+                                  members: widget.mission.memberIds,
+                                  lastMessageAt: DateTime.now(),
+                                  createdBy: widget.mission.ownerId,
+                                ),
+                              )));
+                            }
+                            break;
+                          case 'vault':
+                            if (!needsVaulting && isCreator) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot vault: tasks missing approval!')));
+                              return;
+                            }
+                            await widget.service.completeMission(widget.mission.id, widget.userName);
+                            Navigator.pop(context);
+                            break;
+                          case 'members':
+                            _showMembersEarningsDialog(allTasks);
+                            break;
+                          case 'delete':
+                            await widget.service.deleteMission(widget.mission.id);
+                            Navigator.pop(context);
+                            break;
                         }
-                      }
-                    },
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
-                  onPressed: () async {
-                    await widget.service.deleteMission(widget.mission.id);
-                    Navigator.pop(context);
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.forum_rounded, color: Colors.blueAccent),
-                  tooltip: 'War Room Chat',
-                  onPressed: () async {
-                    final chatId = await widget.service.ensureProjectChat(widget.mission);
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => GroupChatScreen(
-                      group: GroupModel(
-                        groupId: chatId,
-                        name: 'WAR ROOM: ${widget.mission.title}',
-                        members: widget.mission.memberIds,
-                        lastMessageAt: DateTime.now(),
-                        createdBy: widget.mission.ownerId,
-                      ),
-                    )));
-                  },
+                      },
+                      itemBuilder: (ctx) => [
+                        const PopupMenuItem(value: 'rename', child: ListTile(dense: true, leading: Icon(Icons.edit_rounded), title: Text('Rename Mission'))),
+                        if (widget.mission.type == MissionType.teamMission || widget.mission.type == MissionType.teamTask)
+                          const PopupMenuItem(value: 'invite', child: ListTile(dense: true, leading: Icon(Icons.person_add_rounded), title: Text('Invite Members'))),
+                        const PopupMenuItem(value: 'members', child: ListTile(dense: true, leading: Icon(Icons.badge_rounded), title: Text('Mission Members List'))),
+                        PopupMenuItem(value: 'big_three', child: ListTile(dense: true, leading: Icon(widget.mission.isBigThree ? Icons.auto_awesome_rounded : Icons.auto_awesome_outlined), title: Text(widget.mission.isBigThree ? 'Focus Big 3' : 'Focus Big 3'))),
+                        const PopupMenuItem(value: 'war_room', child: ListTile(dense: true, leading: Icon(Icons.forum_rounded), title: Text('War Room Chat'))),
+                        const PopupMenuDivider(),
+                        PopupMenuItem(
+                          value: 'vault', 
+                          enabled: needsVaulting && isCreator,
+                          child: ListTile(
+                            dense: true, 
+                            leading: Icon(Icons.emoji_events_rounded, color: needsVaulting ? Colors.amber : Colors.grey), 
+                            title: Text('Vault Mission', style: TextStyle(color: needsVaulting ? Colors.black : Colors.grey)),
+                          ),
+                        ),
+                        const PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_forever_rounded, color: Colors.red), title: Text('Delete Mission'))),
+                      ],
+                    );
+                  }
                 ),
               ],
             ),
@@ -711,11 +854,27 @@ class _MissionDetailSheetState extends State<_MissionDetailSheet> {
                   },
                 ),
                 Expanded(
+                  flex: 3,
                   child: TextField(
                     controller: _taskController,
                     style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
                     decoration: const InputDecoration(hintText: 'Add a new sub-task...', border: InputBorder.none),
                     onSubmitted: (_) => _handleAddTask(),
+                  ),
+                ),
+                SizedBox(
+                  width: 60,
+                  child: TextField(
+                    controller: _pointsController,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Color(0xFF000000), fontWeight: FontWeight.w900, fontSize: 13),
+                    decoration: const InputDecoration(
+                      hintText: 'Pts',
+                      hintStyle: TextStyle(color: Color(0xFF000000), fontWeight: FontWeight.bold),
+                      border: InputBorder.none, 
+                      prefixIcon: Icon(Icons.stars_rounded, size: 14, color: Colors.orange),
+                    ),
                   ),
                 ),
                 IconButton(
@@ -731,122 +890,638 @@ class _MissionDetailSheetState extends State<_MissionDetailSheet> {
               stream: widget.service.getMissionTasks(widget.mission.id),
               builder: (context, snap) {
                 final tasks = snap.data ?? [];
-                return ListView.builder(
+                // Sort top-level tasks (no parent) first
+                final rootTasks = tasks.where((t) => t.parentId == null).toList();
+                
+                return ListView(
                   padding: const EdgeInsets.all(16),
-                  itemCount: tasks.length,
-                  itemBuilder: (context, index) {
-                    final task = tasks[index];
-                    final bool isOwner = widget.mission.ownerId == widget.userName; // Simplified check
-                    
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      child: Column(
-                        children: [
-                          ListTile(
-                            leading: Checkbox(
-                              value: task.isCompleted,
-                              onChanged: (val) {
-                                if (widget.mission.type == MissionType.teamMission || widget.mission.type == MissionType.teamTask) {
-                                  widget.service.submitForApproval(task.id, widget.userName);
-                                } else {
-                                  widget.service.toggleTaskStatus(task.id, val ?? false, widget.userName);
-                                }
-                              },
-                            ),
-                            title: Text(task.title, style: TextStyle(
-                              decoration: task.isApproved ? TextDecoration.lineThrough : null,
-                              fontWeight: FontWeight.bold,
-                            )),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (task.assignedToName != null)
-                                  Text('Assigned to: ${task.assignedToName}', style: const TextStyle(fontSize: 10, color: Colors.blue)),
-                                if (task.isCompleted && task.needsApproval)
-                                  const Text('WAITING FOR APPROVAL', style: TextStyle(fontSize: 10, color: Colors.orange, fontWeight: FontWeight.bold))
-                                else if (task.isApproved)
-                                  Text('Completed & Approved by ${task.completedByName}', style: const TextStyle(fontSize: 10, color: Colors.green))
-                                else
-                                  Text('Added by ${task.addedByName}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                if (task.totalTimeSeconds > 0 || task.isTimerRunning)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.timer_outlined, size: 10, color: task.isTimerRunning ? Colors.greenAccent : Colors.grey),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'EFFICIENCY: ${task.totalDuration.inHours}h ${task.totalDuration.inMinutes % 60}m',
-                                          style: TextStyle(fontSize: 10, color: task.isTimerRunning ? Colors.greenAccent : Colors.grey, fontWeight: FontWeight.bold),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            trailing: Wrap(
-                              children: [
-                                IconButton(
-                                  icon: Icon(
-                                    task.isTimerRunning ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
-                                    color: task.isTimerRunning ? Colors.orangeAccent : ChatTheme.primary,
-                                    size: 20,
-                                  ),
-                                  onPressed: () {
-                                    if (task.isTimerRunning) {
-                                      widget.service.stopTaskTimer(task.id, task.totalTimeSeconds);
-                                    } else {
-                                      widget.service.startTaskTimer(task.id);
-                                    }
-                                  },
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.attach_file_rounded, size: 18),
-                                  onPressed: () => _pickAndAttachFile(task.id),
-                                ),
-                                if (task.needsApproval && (widget.mission.ownerId == FirebaseAuth.instance.currentUser?.uid))
-                                  IconButton(
-                                    icon: const Icon(Icons.verified_user_rounded, color: Colors.green, size: 20),
-                                    onPressed: () async {
-                                      await widget.service.approveTask(task.id);
-                                      if (context.mounted) {
-                                        CelebrationOverlay.show(context, title: 'TASK APPROVED!\n🎯 ${task.title}');
-                                      }
-                                    },
-                                  ),
-                                IconButton(
-                                  icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
-                                  onPressed: () => _showAssignMemberDialog(task.id),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.close, size: 18, color: Colors.red),
-                                  onPressed: () => widget.service.deleteTask(task.id),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (task.resources.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              child: Wrap(
-                                spacing: 8,
-                                children: task.resources.map((res) => ActionChip(
-                                  label: Text(res['name'] ?? 'File', style: const TextStyle(fontSize: 10)),
-                                  avatar: Icon(_getFileIcon(res['type']), size: 14),
-                                  onPressed: () => launchUrl(Uri.parse(res['url']!)),
-                                )).toList(),
-                              ),
-                            ),
-                        ],
-                      ),
-                    );
-                  },
+                  children: rootTasks.map((task) => _buildTaskNode(task, tasks, 0)).toList(),
                 );
               },
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTaskNode(MissionTask task, List<MissionTask> allTasks, int level) {
+    if (level >= 10) return const SizedBox.shrink(); // Tree depth limit
+
+    final children = allTasks.where((t) => t.parentId == task.id).toList();
+    final double fontSize = 16.0 - (level * 1.2); 
+    final double paddingLeft = level * 16.0;
+
+    int calculateTotalGroupPotential(MissionTask t, List<MissionTask> others) {
+      int total = t.pointsRewards;
+      final directChildren = others.where((task) => task.parentId == t.id).toList();
+      for (var child in directChildren) {
+        total += calculateTotalGroupPotential(child, others);
+      }
+      return total;
+    }
+
+    final int totalGroupPotential = calculateTotalGroupPotential(task, allTasks);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(left: paddingLeft),
+          child: Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            elevation: level == 0 ? 2 : 0,
+            color: level == 0 ? Colors.white : Colors.white.withOpacity(1.0 - (level * 0.05)),
+            child: Column(
+              children: [
+                ListTile(
+                  dense: level > 0,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  leading: IconButton(
+                    icon: const Icon(Icons.more_vert, size: 20, color: Colors.black54),
+                    onPressed: () => _showTaskOptions(task),
+                  ),
+                  title: Row(
+                    children: [
+                      if (children.isNotEmpty)
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          icon: Icon(
+                            _collapsedTaskIds.contains(task.id) ? Icons.chevron_right_rounded : Icons.expand_more_rounded,
+                            size: 18,
+                            color: Colors.black54,
+                          ),
+                          onPressed: () => setState(() {
+                            if (_collapsedTaskIds.contains(task.id)) {
+                              _collapsedTaskIds.remove(task.id);
+                            } else {
+                              _collapsedTaskIds.add(task.id);
+                            }
+                          }),
+                        ),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Text(
+                            task.title,
+                            style: TextStyle(
+                              decoration: task.isApproved ? TextDecoration.lineThrough : null,
+                              fontWeight: level == 0 ? FontWeight.bold : FontWeight.w600,
+                              fontSize: fontSize,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.add_circle_outline_rounded, color: Colors.black, size: 20),
+                        onPressed: () => _showPlusMenu(task),
+                      ),
+                    ],
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          if (task.pointsRewards > 0)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: Text('🎯 Self: +${task.pointsRewards}P', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange)),
+                            ),
+                          if (children.isNotEmpty)
+                             Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(4)),
+                              child: Text('TOTAL WEIGHT: $totalGroupPotential Pts', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white)),
+                            ),
+                          const SizedBox(width: 8),
+                          if (task.notes != null && task.notes!.isNotEmpty)
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: const Icon(Icons.notes_rounded, color: Colors.blueAccent, size: 16),
+                              onPressed: () => _showTaskNoteDialog(task),
+                            ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: Icon(
+                              task.isTimerRunning ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
+                              color: task.isTimerRunning ? Colors.orange : Colors.black54,
+                              size: 16,
+                            ),
+                            onPressed: () {
+                              if (task.isTimerRunning) {
+                                widget.service.stopTaskTimer(task.id, task.totalTimeSeconds);
+                              } else {
+                                widget.service.startTaskTimer(task.id);
+                              }
+                            },
+                          ),
+                          if (task.needsApproval && (widget.mission.ownerId == _uid))
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: const Icon(Icons.verified_user_rounded, color: Colors.green, size: 16),
+                              onPressed: () => _showApprovalMarksDialog(task),
+                            ),
+                        ],
+                      ),
+                      if (task.assignedToName != null)
+                        Text('User: ${task.assignedToName}', style: TextStyle(fontSize: fontSize * 0.7, color: Colors.blue, fontWeight: FontWeight.bold)),
+                      if (task.isCompleted && task.needsApproval)
+                        Text('WAITING FOR CREATOR APPROVAL', style: TextStyle(fontSize: fontSize * 0.7, color: Colors.orange, fontWeight: FontWeight.bold))
+                      else if (task.isApproved)
+                        Text('APPROVED: ${task.approvedPoints}/${task.pointsRewards} Pts', style: TextStyle(fontSize: fontSize * 0.7, color: Colors.green, fontWeight: FontWeight.bold))
+                      else
+                        Text('Total Potential: ${task.pointsRewards} Pts', style: TextStyle(fontSize: fontSize * 0.7, color: Colors.grey)),
+                      if (task.resources.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Wrap(
+                            spacing: 4,
+                            children: task.resources.map((res) => GestureDetector(
+                              onTap: () => launchUrl(Uri.parse(res['url']!)),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
+                                child: Text(res['name'] ?? 'File', style: const TextStyle(fontSize: 8, color: Colors.black87)),
+                              ),
+                            )).toList(),
+                          ),
+                        ),
+                    ],
+                  ),
+                  trailing: Checkbox(
+                    value: task.isCompleted,
+                    onChanged: (val) => _handleTaskToggle(task, val ?? false),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (!_collapsedTaskIds.contains(task.id))
+          ...children.map((child) => _buildTaskNode(child, allTasks, level + 1)).toList(),
+      ],
+    );
+  }
+
+  void _showMembersEarningsDialog(List<MissionTask> tasks) {
+    // Map UID to Points
+    final earnings = <String, int>{};
+    for (var t in tasks) {
+      if (t.isApproved && t.completedByUid != null) {
+        earnings[t.completedByUid!] = (earnings[t.completedByUid!] ?? 0) + t.approvedPoints;
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Column(
+          children: [
+            const Icon(Icons.groups_rounded, size: 40, color: ChatTheme.primary),
+            const SizedBox(height: 8),
+            Text('MISSION MEMBERS', style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, fontSize: 18)),
+            const Divider(),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('users').where('uid', whereIn: widget.mission.memberIds).snapshots(),
+            builder: (context, userSnap) {
+              if (!userSnap.hasData) return const Center(child: CircularProgressIndicator());
+              final userDocs = userSnap.data!.docs;
+
+              return ListView.builder(
+                shrinkWrap: true,
+                itemCount: userDocs.length,
+                itemBuilder: (context, i) {
+                  final userData = userDocs[i].data() as Map<String, dynamic>;
+                  final name = userData['name'] ?? 'Unknown';
+                  final uid = userData['uid'] ?? '';
+                  final points = earnings[uid] ?? 0;
+                  final isCreator = uid == widget.mission.ownerId;
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isCreator ? Colors.orange.withOpacity(0.05) : Colors.blue.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: isCreator ? Colors.orange : Colors.blue, width: 0.5),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: isCreator ? Colors.orange : Colors.blue,
+                          child: Text(name[0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(name, style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.black, fontSize: 14)),
+                              Text(isCreator ? 'CREATOR' : 'TEAM USER', style: TextStyle(fontSize: 10, color: isCreator ? Colors.orange : Colors.blue, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(20)),
+                          child: Text(
+                            '$points PTS',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CLOSE', style: TextStyle(fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+  }
+
+  void _showApprovalMarksDialog(MissionTask task) {
+    final marksCtrl = TextEditingController(text: task.pointsRewards.toString());
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('APPROVE & REWARD', style: TextStyle(fontWeight: FontWeight.w900)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Task: ${task.title}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Text('Assign Marks (Max ${task.pointsRewards}):', style: const TextStyle(fontSize: 12)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: marksCtrl,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: Colors.black),
+              decoration: const InputDecoration(border: OutlineInputBorder(), prefixIcon: Icon(Icons.stars_rounded, color: Colors.orange)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          ElevatedButton(
+            onPressed: () {
+              final marks = int.tryParse(marksCtrl.text) ?? 0;
+              widget.service.approveTask(task.id, marks, widget.userName);
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Task Approved with $marks Marks!')));
+            },
+            child: const Text('APPROVE TASK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleTaskToggle(MissionTask task, bool newValue) async {
+    // If we are unchecking, ask for password
+    if (task.isCompleted && !newValue) {
+      final passCtrl = TextEditingController();
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('UNLOCK TASK', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Enter password to uncheck this task:', style: TextStyle(fontSize: 12)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passCtrl,
+                obscureText: true,
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+                decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'Password'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
+            ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('UNLOCK')),
+          ],
+        ),
+      );
+
+      if (confirmed == true && passCtrl.text == 'abcd') {
+         widget.service.toggleTaskStatus(task.id, false, widget.userName);
+      } else if (confirmed == true) {
+         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Wrong password!')));
+      }
+      return;
+    }
+
+    // Normal completion
+    if (newValue) {
+      if (widget.mission.type == MissionType.teamMission || widget.mission.type == MissionType.teamTask) {
+        widget.service.submitForApproval(task.id, widget.userName);
+      } else {
+        widget.service.toggleTaskStatus(task.id, true, widget.userName);
+      }
+    }
+  }
+
+  void _showPlusMenu(MissionTask parentTask) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        contentPadding: const EdgeInsets.symmetric(vertical: 16),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.add_task_rounded, color: Colors.black, size: 28),
+              title: const Text('Add Subtask', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 20)),
+              onTap: () {
+                Navigator.pop(context);
+                _showAddSubtaskDialog(parentTask);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.note_add_rounded, color: Colors.black, size: 28),
+              title: const Text('Add / View Note', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 20)),
+              onTap: () {
+                Navigator.pop(context);
+                _showTaskNoteDialog(parentTask);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.forum_rounded, color: Colors.black, size: 28),
+              title: const Text('War Room Chat', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 20)),
+              onTap: () async {
+                Navigator.pop(context);
+                final chatId = await widget.service.ensureProjectChat(widget.mission);
+                if (mounted) {
+                   Navigator.push(context, MaterialPageRoute(builder: (_) => GroupChatScreen(
+                    group: GroupModel(
+                      groupId: chatId,
+                      name: 'CHAT: ${parentTask.title}',
+                      members: widget.mission.memberIds,
+                      lastMessageAt: DateTime.now(),
+                      createdBy: widget.mission.ownerId,
+                    ),
+                  )));
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddSubtaskDialog(MissionTask parentTask) {
+    final ctrl = TextEditingController();
+    final pointsCtrl = TextEditingController(text: '0');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: ChatTheme.surface,
+        title: Text('NEW SUBTASK', style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, color: ChatTheme.primary, fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+              decoration: const InputDecoration(labelText: 'Subtask Title', labelStyle: TextStyle(color: Colors.black54)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: pointsCtrl,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+              decoration: const InputDecoration(
+                labelText: 'Points Reward', 
+                labelStyle: TextStyle(color: Colors.black54),
+                hintStyle: TextStyle(color: Colors.black54),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          ElevatedButton(
+            onPressed: () {
+              if (ctrl.text.isNotEmpty) {
+                widget.service.addTask(
+                  widget.mission.id, 
+                  ctrl.text.trim(), 
+                  widget.userName, 
+                  parentId: parentTask.id,
+                  pointsRewards: int.tryParse(pointsCtrl.text) ?? 0
+                );
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('ADD'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTaskNoteDialog(MissionTask task) {
+    final noteController = TextEditingController(text: task.notes);
+    final commentController = TextEditingController();
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => Container(
+          height: MediaQuery.of(context).size.height * 0.8,
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              Container(height: 4, width: 40, decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(2))),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text('TASK NOTES & DISCUSSION', style: GoogleFonts.montserrat(fontWeight: FontWeight.w900, color: ChatTheme.primary, fontSize: 16)),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: noteController,
+                        maxLines: 4,
+                        style: const TextStyle(color: Colors.black, fontSize: 13),
+                        decoration: const InputDecoration(
+                          labelText: 'Core Notes (Shared)',
+                          labelStyle: TextStyle(color: Colors.black54),
+                          border: OutlineInputBorder(),
+                        ),
+                        onChanged: (val) async {
+                           // Debounced update or manual save button
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.save_rounded, size: 16),
+                        label: const Text('SAVE NOTES'),
+                        onPressed: () async {
+                           await widget.service.updateTaskNotes(task.id, noteController.text.trim());
+                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Notes Saved!')));
+                        },
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Divider(),
+                      ),
+                      Text('TEAM COMMENTS', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: StreamBuilder<List<Map<String, dynamic>>>(
+                          stream: widget.service.getTaskComments(task.id),
+                          builder: (context, commentSnap) {
+                            final comments = commentSnap.data ?? [];
+                            if (comments.isEmpty) return const Center(child: Text('No comments yet. Start the discussion!', style: TextStyle(fontSize: 12, color: Colors.grey)));
+                            
+                            return ListView.builder(
+                              itemCount: comments.length,
+                              itemBuilder: (context, i) {
+                                final c = comments[i];
+                                final bool isMe = c['senderId'] == _uid;
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: isMe ? ChatTheme.primary.withOpacity(0.05) : Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(c['senderName'] ?? 'Unknown', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: isMe ? ChatTheme.primary : Colors.black54)),
+                                      Text(c['text'] ?? '', style: const TextStyle(fontSize: 12, color: Colors.black)),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: commentController,
+                        style: const TextStyle(color: Colors.black),
+                        decoration: const InputDecoration(
+                          hintText: 'Add a comment...',
+                          hintStyle: TextStyle(color: Colors.grey),
+                          border: InputBorder.none,
+                          fillColor: Colors.transparent,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.send_rounded, color: ChatTheme.primary),
+                      onPressed: () async {
+                        if (commentController.text.isNotEmpty) {
+                          await widget.service.addTaskComment(task.id, commentController.text.trim(), widget.userName);
+                          commentController.clear();
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showTaskOptions(MissionTask task) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        contentPadding: const EdgeInsets.symmetric(vertical: 16),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_rounded, color: Colors.black, size: 28),
+              title: const Text('Rename', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 20)),
+              onTap: () {
+                Navigator.pop(context);
+                _showRenameTaskDialog(task);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.person_add_rounded, color: Colors.black, size: 28),
+              title: const Text('Assign', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 20)),
+              onTap: () {
+                Navigator.pop(context);
+                _showAssignMemberDialog(task.id);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.attach_file_rounded, color: Colors.black, size: 28),
+              title: const Text('Attach File', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 20)),
+              onTap: () {
+                Navigator.pop(context);
+                _pickAndAttachFile(task.id);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.delete_forever_rounded, color: Colors.red, size: 28),
+              title: const Text('Delete', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w900, fontSize: 20)),
+              onTap: () {
+                Navigator.pop(context);
+                _deleteTaskWithPassword(task.id);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

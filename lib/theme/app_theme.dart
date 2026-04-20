@@ -17,6 +17,8 @@ class ChatTheme {
     useMaterial3: true,
     scaffoldBackgroundColor: background,
     brightness: Brightness.light,
+    // Global default: any TextField without explicit style uses dark black
+    textSelectionTheme: const TextSelectionThemeData(cursorColor: primary),
     textTheme: GoogleFonts.montserratTextTheme().copyWith(
       displayLarge: GoogleFonts.playfairDisplay(fontWeight: FontWeight.w900, color: textPrimary),
       titleLarge: GoogleFonts.playfairDisplay(fontWeight: FontWeight.w900, color: textPrimary, letterSpacing: 1.2),
@@ -64,6 +66,9 @@ class ChatTheme {
       filled: true,
       fillColor: surface,
       contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+      // Global rule: all text typed into any TextField is dark black
+      labelStyle: GoogleFonts.montserrat(color: textPrimary),
+      hintStyle: GoogleFonts.montserrat(color: textSecondary, fontSize: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(30),
         borderSide: const BorderSide(color: primary, width: 1),
@@ -76,7 +81,6 @@ class ChatTheme {
         borderRadius: BorderRadius.circular(30),
         borderSide: const BorderSide(color: primary, width: 2),
       ),
-      hintStyle: GoogleFonts.montserrat(color: textSecondary, fontSize: 14),
     ),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
       backgroundColor: primary,

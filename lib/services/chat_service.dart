@@ -28,7 +28,9 @@ class ChatService {
     String? replyToMessageId,
     String? replyToText,
   }) async {
+    if (receiverId.isEmpty) return; // guard: cannot send to unknown user
     final String currentUserId = _auth.currentUser!.uid;
+    if (currentUserId.isEmpty) return;
     final String chatRoomId = getChatRoomId(currentUserId, receiverId);
     final String messageId = const Uuid().v4();
     final Timestamp timestamp = Timestamp.now();

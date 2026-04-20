@@ -56,7 +56,7 @@ class ExpenseEntry {
   final String projectId;
   final String title;
   final double amount;
-  final ExpenseCategory category;
+  final String category;
   final EntryType type;
   final DateTime date;
   final String addedBy;
@@ -84,7 +84,7 @@ class ExpenseEntry {
       'projectId': projectId,
       'title': title,
       'amount': amount,
-      'category': category.name,
+      'category': category,
       'type': type.name,
       'date': date.toIso8601String(),
       'addedBy': addedBy,
@@ -100,7 +100,7 @@ class ExpenseEntry {
       projectId: map['projectId'] ?? '',
       title: map['title'] ?? '',
       amount: (map['amount'] ?? 0.0).toDouble(),
-      category: ExpenseCategory.values.firstWhere((e) => e.name == map['category'], orElse: () => ExpenseCategory.other),
+      category: map['category'] ?? 'other',
       type: EntryType.values.firstWhere((e) => e.name == map['type'], orElse: () => EntryType.payment),
       date: map['date'] != null ? DateTime.parse(map['date']) : DateTime.now(),
       addedBy: map['addedBy'] ?? '',
